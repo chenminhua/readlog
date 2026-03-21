@@ -7,7 +7,7 @@ rating: 4.0
 addedAt: 2026-01-09
 shelves:
   - "Psychology"
-cover: /static/covers/placeholder.svg
+cover: /static/covers/the-inner-game-of-tennis.jpg
 ---
 
 # Notes

@@ -7,7 +7,7 @@ rating: 4.8
 addedAt: 2026-02-28
 shelves:
   - "Politics"
-cover: /static/covers/placeholder.svg
+cover: /static/covers/comparative-politics.jpg
 ---
 
 # Notes

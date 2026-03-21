@@ -8,7 +8,7 @@ addedAt: 2026-01-16
 shelves:
   - "Psychology"
   - "Self Development"
-cover: /static/covers/placeholder.svg
+cover: /static/covers/12-rules-for-life.jpg
 ---
 
 # Notes

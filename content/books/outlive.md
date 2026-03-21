@@ -7,7 +7,7 @@ rating: 0
 addedAt: 2026-01-09
 shelves:
   - "Health"
-cover: /static/covers/placeholder.svg
+cover: /static/covers/outlive.jpg
 ---
 
 # Notes

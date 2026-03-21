@@ -8,7 +8,7 @@ addedAt: 2026-01-14
 shelves:
   - "Finance"
   - "Self Development"
-cover: /static/covers/placeholder.svg
+cover: /static/covers/the-art-of-spending-money.jpg
 ---
 
 # Notes

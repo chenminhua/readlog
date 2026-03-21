@@ -8,7 +8,7 @@ addedAt: 2026-01-10T20:00:08+08:00
 shelves:
   - "Philosophy"
   - "Biography"
-cover: /static/covers/placeholder.svg
+cover: /static/covers/why-fish-dont-exist.jpg
 ---
 
 # Notes

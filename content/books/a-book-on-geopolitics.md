@@ -7,7 +7,7 @@ rating: 4.0
 addedAt: 2026-02-24
 shelves:
   - "Politics"
-cover: /static/covers/placeholder.svg
+cover: /static/covers/a-book-on-geopolitics.jpg
 ---
 
 # Notes

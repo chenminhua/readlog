@@ -8,7 +8,7 @@ addedAt: 2026-02-11T20:00:08+08:00
 shelves:
   - "Politics"
   - "America"
-cover: /static/covers/placeholder.svg
+cover: /static/covers/american-gridlock.jpg
 ---
 
 # Notes

@@ -5,9 +5,10 @@ publisher: "上海人民出版社"
 publishedAt: 2021-08-01
 rating: 4.3
 addedAt: 2026-02-10
+shelves:
   - "Politics"
   - "China"
-cover: /static/covers/placeholder.svg
+cover: /static/covers/inside-china-government.jpg
 ---
 
 # Notes

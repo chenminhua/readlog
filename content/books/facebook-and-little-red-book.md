@@ -8,7 +8,7 @@ addedAt: 2026-03-11
 shelves:
   - "Business"
   - "Technology"
-cover: /static/covers/placeholder.svg
+cover: /static/covers/facebook-and-little-red-book.jpg
 ---
 
 # Notes

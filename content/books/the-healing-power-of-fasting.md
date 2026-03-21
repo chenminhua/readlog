@@ -8,7 +8,7 @@ addedAt: 2026-01-24
 shelves:
   - "Health"
   - "Lifestyle"
-cover: /static/covers/placeholder.svg
+cover: /static/covers/the-healing-power-of-fasting.jpg
 ---
 
 # Notes
