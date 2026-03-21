@@ -132,11 +132,32 @@ function toBookFrontmatter(data: Record<string, unknown>): BookFrontmatter {
   };
 }
 
+function buildChineseSearchTokens(input: string) {
+  const segments = input.match(/[\u4e00-\u9fff]+/g) ?? [];
+  const tokens = new Set<string>();
+
+  for (const segment of segments) {
+    if (segment.length < 2) {
+      continue;
+    }
+
+    tokens.add(segment);
+
+    for (let size = 2; size <= Math.min(4, segment.length); size += 1) {
+      for (let start = 0; start <= segment.length - size; start += 1) {
+        tokens.add(segment.slice(start, start + size));
+      }
+    }
+  }
+
+  return [...tokens];
+}
+
 function buildSearchTokens(input: string) {
   const normalized = input.toLowerCase();
   const englishTokens = normalized.match(/[a-z0-9]+/g) ?? [];
-  const chineseTokens = normalized.match(/[\u4e00-\u9fff]{2,}/g) ?? [];
-  return Array.from(new Set([...englishTokens, ...chineseTokens])).slice(0, 48);
+  const chineseTokens = buildChineseSearchTokens(normalized);
+  return Array.from(new Set([...englishTokens, ...chineseTokens])).slice(0, 400);
 }
 
 function deriveIdFromFilename(filename: string) {
