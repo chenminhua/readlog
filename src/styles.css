@@ -184,6 +184,11 @@ img {
   text-align: left;
 }
 
+.search-result.is-active {
+  border-color: rgba(35, 70, 63, 0.4);
+  box-shadow: 0 10px 24px rgba(35, 70, 63, 0.16);
+}
+
 .search-result__title {
   font-size: 16px;
   font-weight: 600;
