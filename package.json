@@ -1,0 +1,27 @@
+{
+  "name": "readlog",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "migrate:books": "node scripts/migrate-legacy-books.mjs",
+    "build:data": "tsx scripts/build.ts",
+    "dev": "npm run build:data && vite",
+    "build": "npm run build:data && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "minisearch": "^7.2.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "react-markdown": "^10.1.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.9",
+    "@types/react-dom": "^19.1.7",
+    "@vitejs/plugin-react": "^5.0.2",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.3"
+  }
+}
