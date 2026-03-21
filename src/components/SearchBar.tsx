@@ -76,6 +76,17 @@ export function SearchBar({ query, results, onQueryChange, onSelectResult }: Sea
   };
 
   const handleInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Escape") {
+      if (query.trim()) {
+        event.preventDefault();
+        onQueryChange("");
+        setActiveIndex(-1);
+      } else {
+        inputRef.current?.blur();
+      }
+      return;
+    }
+
     if (!query.trim() || results.length === 0) {
       return;
     }
