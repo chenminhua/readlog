@@ -67,6 +67,9 @@ export default function App() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== "undefined" ? window.matchMedia("(max-width: 720px)").matches : false
+  );
   const searchIndexRef = useRef<MiniSearch<SearchEntry> | null>(null);
 
   useEffect(() => {
@@ -91,6 +94,18 @@ export default function App() {
       .then((detail) => setSelectedBook(detail))
       .finally(() => setDetailLoading(false));
   }, [selectedBookId]);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 720px)");
+    const updateIsMobile = (event: MediaQueryListEvent | MediaQueryList) => setIsMobile(event.matches);
+
+    updateIsMobile(mediaQuery);
+
+    const handleChange = (event: MediaQueryListEvent) => updateIsMobile(event);
+    mediaQuery.addEventListener("change", handleChange);
+
+    return () => mediaQuery.removeEventListener("change", handleChange);
+  }, []);
 
   useEffect(() => {
     if (!query.trim()) {
@@ -139,6 +154,7 @@ export default function App() {
   }, [activeShelf, books, sortMode]);
 
   const activeShelfLabel = activeShelf === "all" ? "所有图书" : activeShelf;
+  const showMobileDetail = isMobile && Boolean(selectedBookId);
 
   return (
     <div className="layout">
@@ -185,7 +201,7 @@ export default function App() {
           </div>
         </div>
 
-        <div className="content-grid">
+        <div className={`content-grid ${showMobileDetail ? "is-mobile-detail" : ""}`}>
           <section className="books-panel">
             {visibleBooks.map((book) => (
               <BookCard
@@ -197,7 +213,14 @@ export default function App() {
             ))}
           </section>
 
-          <BookDetail book={selectedBook} loading={detailLoading} />
+          <section className="detail-wrapper">
+            {showMobileDetail ? (
+              <button className="detail-back" onClick={() => setSelectedBookId(null)} type="button">
+                ← 返回书单
+              </button>
+            ) : null}
+            <BookDetail book={selectedBook} loading={detailLoading} />
+          </section>
         </div>
       </main>
     </div>

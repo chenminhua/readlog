@@ -248,6 +248,22 @@ mark {
   align-content: start;
 }
 
+.detail-wrapper {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+
+.detail-back {
+  align-self: start;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel-strong);
+  padding: 8px 14px;
+  color: #2b2520;
+  font-size: 14px;
+}
+
 .book-card,
 .detail-panel {
   border: 1px solid var(--border);
@@ -515,6 +531,24 @@ mark {
   .content-grid {
     gap: 14px;
     margin-top: 14px;
+  }
+
+  .detail-wrapper {
+    display: none;
+  }
+
+  .content-grid.is-mobile-detail .books-panel {
+    display: none;
+  }
+
+  .content-grid.is-mobile-detail .detail-wrapper {
+    display: grid;
+  }
+
+  .detail-back {
+    position: sticky;
+    top: 74px;
+    z-index: 2;
   }
 
   .book-card {
