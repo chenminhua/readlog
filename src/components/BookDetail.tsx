@@ -1,65 +1,32 @@
 import ReactMarkdown from "react-markdown";
 import type { BookDetail as BookDetailType } from "../types";
+import { Icon } from "./Icon";
 
-type BookDetailProps = {
-  book: BookDetailType | null;
-  loading: boolean;
-};
+type BookDetailProps = { book: BookDetailType | null; loading: boolean };
 
 export function BookDetail({ book, loading }: BookDetailProps) {
-  if (loading) {
-    return <section className="detail-panel detail-panel--placeholder">正在加载详情…</section>;
-  }
-
-  if (!book) {
-    return (
-      <section className="detail-panel detail-panel--placeholder">
-        <h2>选择一本书</h2>
-        <p>右侧列表默认展示当前书架内的书，点击卡片后按需加载详情。</p>
-      </section>
-    );
-  }
-
+  if (loading) return <div className="detail-loading" role="status"><div className="skeleton skeleton-cover" /><div><div className="skeleton skeleton-title" /><div className="skeleton skeleton-line" /><p>正在打开这本书…</p></div></div>;
+  if (!book) return null;
   const coverSrc = book.cover.startsWith("/") ? `.${book.cover}` : book.cover;
-
   return (
-    <section className="detail-panel">
+    <article className="detail-panel">
       <div className="detail-panel__hero">
-        <img alt={`${book.title} cover`} src={coverSrc} />
-        <div>
-          <p className="eyebrow">Book Detail</p>
-          <h2>{book.title}</h2>
+        <div className="detail-cover"><img alt={`${book.title}封面`} src={coverSrc} /></div>
+        <div className="detail-heading">
+          <p className="detail-shelves">{book.shelves.join(" / ") || "未分类"}</p>
+          <h1>{book.title}</h1>
+          <p className="detail-author">{book.author}</p>
+          <p className="detail-rating"><Icon name="star" size={17} />{book.rating > 0 ? book.rating.toFixed(1) : "未评分"}<span>个人评分</span></p>
           <dl className="detail-meta">
-            <div>
-              <dt>作者</dt>
-              <dd>{book.author}</dd>
-            </div>
-            <div>
-              <dt>出版社</dt>
-              <dd>{book.publisher || "未知"}</dd>
-            </div>
-            <div>
-              <dt>出版时间</dt>
-              <dd>{book.publishedAt || "未知"}</dd>
-            </div>
-            <div>
-              <dt>评分</dt>
-              <dd>{book.rating > 0 ? book.rating.toFixed(1) : "未评分"}</dd>
-            </div>
-            <div>
-              <dt>书架</dt>
-              <dd>{book.shelves.join(" / ") || "未分类"}</dd>
-            </div>
+            <div><dt>出版社</dt><dd>{book.publisher || "暂无信息"}</dd></div>
+            <div><dt>出版时间</dt><dd>{book.publishedAt || "暂无信息"}</dd></div>
           </dl>
         </div>
       </div>
-
-      <div className="detail-notes">
-        <h3>笔记</h3>
-        <div className="markdown-body">
-          <ReactMarkdown>{book.notes}</ReactMarkdown>
-        </div>
-      </div>
-    </section>
+      <section className="detail-notes" aria-labelledby="notes-heading">
+        <div className="notes-heading"><h2 id="notes-heading">阅读笔记</h2><span>NOTES</span></div>
+        <div className="markdown-body">{book.notes.trim() ? <ReactMarkdown>{book.notes}</ReactMarkdown> : <p className="empty-notes">还没有留下笔记。</p>}</div>
+      </section>
+    </article>
   );
 }

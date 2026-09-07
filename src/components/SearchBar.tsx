@@ -1,35 +1,31 @@
 import { useEffect, useRef, useState } from "react";
-import type { KeyboardEvent } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { SearchResult } from "../types";
+import { Icon } from "./Icon";
 
 type SearchBarProps = {
   query: string;
   results: SearchResult[];
+  loading: boolean;
+  error: boolean;
   onQueryChange: (query: string) => void;
   onSelectResult: (id: string) => void;
 };
 
 function highlight(text: string, query: string) {
-  if (!query.trim()) {
-    return text;
-  }
-
-  const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const matcher = new RegExp(`(${escapedQuery})`, "gi");
-  const parts = text.split(matcher);
-
-  return parts.map((part, index) =>
-    index % 2 === 1 ? (
-      <mark key={`${part}-${index}`}>{part}</mark>
-    ) : (
-      <span key={`${part}-${index}`}>{part}</span>
-    )
-  );
+  const terms = query.trim().split(/\s+/).filter(Boolean).sort((a, b) => b.length - a.length);
+  if (!terms.length) return text;
+  const matcher = new RegExp(`(${terms.map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`, "gi");
+  return text.split(matcher).map((part, index) => index % 2 === 1 ? <mark key={index}>{part}</mark> : part);
 }
 
-export function SearchBar({ query, results, onQueryChange, onSelectResult }: SearchBarProps) {
-  const inputRef = useRef<HTMLInputElement | null>(null);
-  const [activeIndex, setActiveIndex] = useState(-1);
+export function SearchBar({ query, results, loading, error, onQueryChange, onSelectResult }: SearchBarProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [focused, setFocused] = useState(false);
+  const expanded = focused && Boolean(query.trim());
+  const shortcut = /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘ K" : "Ctrl K";
 
   useEffect(() => {
     const handleGlobalShortcut = (event: KeyboardEvent) => {
@@ -39,112 +35,70 @@ export function SearchBar({ query, results, onQueryChange, onSelectResult }: Sea
         inputRef.current?.select();
       }
     };
-
+    const dismiss = (event: PointerEvent) => {
+      if (event.target instanceof Node && !panelRef.current?.contains(event.target)) setFocused(false);
+    };
     window.addEventListener("keydown", handleGlobalShortcut);
-    return () => window.removeEventListener("keydown", handleGlobalShortcut);
+    document.addEventListener("pointerdown", dismiss);
+    return () => { window.removeEventListener("keydown", handleGlobalShortcut); document.removeEventListener("pointerdown", dismiss); };
   }, []);
 
+  useEffect(() => { setActiveIndex(0); }, [query, results]);
   useEffect(() => {
-    if (!query.trim()) {
-      setActiveIndex(-1);
-      return;
-    }
-
-    if (results.length === 0) {
-      setActiveIndex(-1);
-      return;
-    }
-
-    setActiveIndex((current) => {
-      if (current < 0) {
-        return 0;
-      }
-
-      return Math.min(current, results.length - 1);
-    });
-  }, [query, results]);
+    if (expanded) document.getElementById(`search-option-${activeIndex}`)?.scrollIntoView({ block: "nearest" });
+  }, [activeIndex, expanded]);
 
   const selectResultAt = (index: number) => {
-    const result = results[index];
-
-    if (!result) {
-      return;
-    }
-
-    onSelectResult(result.id);
-    setActiveIndex(-1);
+    if (!results[index]) return;
+    onSelectResult(results[index].id);
+    setFocused(false);
+    inputRef.current?.blur();
   };
-
-  const handleInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+  const handleInputKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (event.nativeEvent.isComposing) return;
     if (event.key === "Escape") {
-      if (query.trim()) {
-        event.preventDefault();
-        onQueryChange("");
-        setActiveIndex(-1);
-      } else {
-        inputRef.current?.blur();
-      }
-      return;
-    }
-
-    if (!query.trim() || results.length === 0) {
-      return;
-    }
-
-    if (event.key === "ArrowDown") {
       event.preventDefault();
-      setActiveIndex((current) => (current + 1) % results.length);
+      if (query) onQueryChange("");
+      else { setFocused(false); inputRef.current?.blur(); }
       return;
     }
-
-    if (event.key === "ArrowUp") {
+    if (!query.trim() || !results.length) return;
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
-      setActiveIndex((current) => (current - 1 + results.length) % results.length);
-      return;
-    }
-
-    if (event.key === "Enter") {
+      setFocused(true);
+      setActiveIndex((current) => (current + (event.key === "ArrowDown" ? 1 : -1) + results.length) % results.length);
+    } else if (event.key === "Enter" && expanded) {
       event.preventDefault();
-      const targetIndex = activeIndex >= 0 ? activeIndex : 0;
-      selectResultAt(targetIndex);
+      selectResultAt(activeIndex);
     }
   };
 
   return (
-    <div className="search-panel">
-      <label className="search-input">
-        <span className="sr-only">搜索书名、作者、笔记</span>
-        <input
-          onChange={(event) => onQueryChange(event.target.value)}
-          onKeyDown={handleInputKeyDown}
-          placeholder="搜索标题、作者、笔记"
-          ref={inputRef}
-          type="search"
-          value={query}
-        />
-      </label>
-
-      {query.trim() ? (
-        <div className="search-results">
-          {results.length > 0 ? (
-            results.map((result, index) => (
-              <button
-                className={`search-result${index === activeIndex ? " is-active" : ""}`}
-                key={result.id}
-                onClick={() => selectResultAt(index)}
-                onMouseEnter={() => setActiveIndex(index)}
-                type="button"
-              >
+    <div className="search-panel" ref={panelRef} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false); }}>
+      <div className={`search-input ${expanded ? "is-open" : ""}`}>
+        <Icon name="search" size={19} />
+        <label className="sr-only" htmlFor="book-search">搜索书名、作者、笔记</label>
+        <input id="book-search" role="combobox" aria-autocomplete="list" aria-expanded={expanded} aria-controls={expanded ? "search-results" : undefined} aria-activedescendant={expanded && results[activeIndex] ? `search-option-${activeIndex}` : undefined}
+          autoComplete="off" onChange={(event) => { onQueryChange(event.target.value); setFocused(true); }} onFocus={() => setFocused(true)} onKeyDown={handleInputKeyDown}
+          placeholder="搜索书名、作者、笔记…" ref={inputRef} type="search" value={query} />
+        {query ? <button className="search-clear" type="button" aria-label="清空搜索" onClick={() => { onQueryChange(""); inputRef.current?.focus(); }}><Icon name="close" size={17} /></button> : <kbd>{shortcut}</kbd>}
+      </div>
+      {expanded && (
+        <div className="search-dropdown">
+          <div className="search-summary" role="status">{loading ? "正在搜索…" : error ? "搜索暂时不可用，请稍后重新输入。" : results.length ? `${results.length} 条匹配结果` : "没有找到匹配内容，试试其他关键词。"}</div>
+          <div className="search-results" id="search-results" role="listbox" aria-label="搜索结果" aria-busy={loading}>
+            {results.map((result, index) => (
+              <div className={`search-result ${index === activeIndex ? "is-active" : ""}`} role="option" aria-selected={index === activeIndex} id={`search-option-${index}`} key={result.id}
+                onMouseDown={(event) => event.preventDefault()} onClick={() => selectResultAt(index)} onMouseEnter={() => setActiveIndex(index)}>
                 <div className="search-result__title">{highlight(result.title, query)}</div>
                 <div className="search-result__meta">{highlight(result.author, query)}</div>
                 <p>{highlight(result.excerpt, query)}</p>
-              </button>
-            ))
-          ) : (
-            <div className="search-empty">没有找到匹配内容。</div>
-          )}
+              </div>
+            ))}
+          </div>
+          {results.length > 0 && <div className="search-hint"><span>↑ ↓ 选择</span><span>↵ 打开</span><span>esc 清空</span></div>}
         </div>
-      ) : null}
+      )}
     </div>
   );
 }

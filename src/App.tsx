@@ -1,12 +1,14 @@
-import MiniSearch from "minisearch";
-import { useEffect, useMemo, useRef, useState } from "react";
+import type MiniSearch from "minisearch";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { BookCard } from "./components/BookCard";
-import { BookDetail } from "./components/BookDetail";
 import { SearchBar } from "./components/SearchBar";
+import { Icon } from "./components/Icon";
+import { DetailErrorBoundary } from "./components/DetailErrorBoundary";
 import { Sidebar } from "./components/Sidebar";
 import type { BookDetail as BookDetailType, BookListItem, SearchEntry, SearchResult, ShelfStat } from "./types";
 
 type SortMode = "addedAt" | "rating";
+const BookDetail = lazy(() => import("./components/BookDetail").then((module) => ({ default: module.BookDetail })));
 
 function compareBooks(left: BookListItem, right: BookListItem, sortMode: SortMode) {
   if (sortMode === "rating") {
@@ -57,170 +59,184 @@ function buildMatchedExcerpt(content: string, query: string) {
   return `${prefix}${normalizedContent.slice(snippetStart, snippetEnd).trim()}${suffix}`;
 }
 
+function bookIdFromLocation() {
+  const params = new URLSearchParams(window.location.hash.slice(1));
+  return params.get("book");
+}
+
+async function fetchData<T>(path: string, signal?: AbortSignal): Promise<T> {
+  const response = await fetch(path, { signal });
+  if (!response.ok) throw new Error(`Could not load ${path}`);
+  return response.json() as Promise<T>;
+}
+
 export default function App() {
   const [books, setBooks] = useState<BookListItem[]>([]);
   const [shelves, setShelves] = useState<ShelfStat[]>([]);
   const [activeShelf, setActiveShelf] = useState("all");
   const [sortMode, setSortMode] = useState<SortMode>("addedAt");
-  const [selectedBookId, setSelectedBookId] = useState<string | null>(null);
+  const [selectedBookId, setSelectedBookId] = useState<string | null>(bookIdFromLocation);
   const [selectedBook, setSelectedBook] = useState<BookDetailType | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState(false);
+  const [booksLoading, setBooksLoading] = useState(true);
+  const [booksError, setBooksError] = useState(false);
+  const [retry, setRetry] = useState(0);
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-  const [isMobile, setIsMobile] = useState(() =>
-    typeof window !== "undefined" ? window.matchMedia("(max-width: 720px)").matches : false
-  );
-  const searchIndexRef = useRef<MiniSearch<SearchEntry> | null>(null);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState(false);
+  const searchIndexRef = useRef<Promise<MiniSearch<SearchEntry>> | null>(null);
+  const scrollPosition = useRef(0);
+  const lastBookId = useRef<string | null>(null);
+  const backRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
+    const controller = new AbortController();
+    setBooksLoading(true);
+    setBooksError(false);
     void Promise.all([
-      fetch("./data/books.json").then((response) => response.json() as Promise<BookListItem[]>),
-      fetch("./data/shelves.json").then((response) => response.json() as Promise<ShelfStat[]>)
+      fetchData<BookListItem[]>("./data/books.json", controller.signal),
+      fetchData<ShelfStat[]>("./data/shelves.json", controller.signal)
     ]).then(([bookData, shelfData]) => {
       setBooks(bookData);
       setShelves(shelfData);
-    });
+    }).catch(() => { if (!controller.signal.aborted) setBooksError(true); })
+      .finally(() => { if (!controller.signal.aborted) setBooksLoading(false); });
+    return () => controller.abort();
+  }, [retry]);
+
+  useEffect(() => {
+    const handleHashChange = () => setSelectedBookId(bookIdFromLocation());
+    window.addEventListener("hashchange", handleHashChange);
+    return () => window.removeEventListener("hashchange", handleHashChange);
   }, []);
 
   useEffect(() => {
-    if (!selectedBookId) {
-      setSelectedBook(null);
-      return;
-    }
-
-    setDetailLoading(true);
-    void fetch(`./data/books/${selectedBookId}.json`)
-      .then((response) => response.json() as Promise<BookDetailType>)
-      .then((detail) => setSelectedBook(detail))
-      .finally(() => setDetailLoading(false));
+    const frame = requestAnimationFrame(() => {
+      if (selectedBookId) {
+        window.scrollTo(0, 0);
+        backRef.current?.focus({ preventScroll: true });
+      } else {
+        window.scrollTo(0, scrollPosition.current);
+        const card = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-book-id]")).find((item) => item.dataset.bookId === lastBookId.current);
+        card?.focus({ preventScroll: true });
+      }
+    });
+    return () => cancelAnimationFrame(frame);
   }, [selectedBookId]);
 
   useEffect(() => {
-    const mediaQuery = window.matchMedia("(max-width: 720px)");
-    const updateIsMobile = (event: MediaQueryListEvent | MediaQueryList) => setIsMobile(event.matches);
-
-    updateIsMobile(mediaQuery);
-
-    const handleChange = (event: MediaQueryListEvent) => updateIsMobile(event);
-    mediaQuery.addEventListener("change", handleChange);
-
-    return () => mediaQuery.removeEventListener("change", handleChange);
-  }, []);
+    setSelectedBook(null);
+    setDetailError(false);
+    if (!selectedBookId) return;
+    const controller = new AbortController();
+    setDetailLoading(true);
+    void fetchData<BookDetailType>(`./data/books/${encodeURIComponent(selectedBookId)}.json`, controller.signal)
+      .then(setSelectedBook)
+      .catch(() => { if (!controller.signal.aborted) setDetailError(true); })
+      .finally(() => { if (!controller.signal.aborted) setDetailLoading(false); });
+    return () => controller.abort();
+  }, [selectedBookId, retry]);
 
   useEffect(() => {
-    if (!query.trim()) {
-      setSearchResults([]);
-      return;
-    }
-
-    const loadAndSearch = async () => {
-      if (!searchIndexRef.current) {
-        const entries = await fetch("./data/search-index.json").then(
-          (response) => response.json() as Promise<SearchEntry[]>
-        );
-
-        searchIndexRef.current = new MiniSearch<SearchEntry>({
-          fields: ["title", "author", "content", "tokens"],
-          storeFields: ["id", "title", "author", "excerpt", "content", "tokens"],
-          searchOptions: {
-            prefix: true,
-            fuzzy: 0.2
+    setSearchResults([]);
+    setSearchError(false);
+    if (!query.trim()) { setSearchLoading(false); return; }
+    let cancelled = false;
+    setSearchLoading(true);
+    const timer = window.setTimeout(() => {
+      const loadAndSearch = async () => {
+        try {
+          if (!searchIndexRef.current) {
+            searchIndexRef.current = Promise.all([fetchData<SearchEntry[]>("./data/search-index.json"), import("minisearch")]).then(([entries, { default: MiniSearch }]) => {
+              const index = new MiniSearch<SearchEntry>({
+                fields: ["title", "author", "content", "tokens"],
+                storeFields: ["id", "title", "author", "excerpt", "content", "tokens"]
+              });
+              index.addAll(entries);
+              return index;
+            }).catch((error: unknown) => { searchIndexRef.current = null; throw error; });
           }
-        });
-        searchIndexRef.current.addAll(entries);
-      }
-
-      const results = searchIndexRef.current.search(query, {
-        prefix: true,
-        fuzzy: 0.2
-      }) as Array<SearchEntry & { score: number }>;
-
-      setSearchResults(
-        results.slice(0, 10).map((result) => ({
-          ...result,
-          excerpt: buildMatchedExcerpt(result.content, query)
-        }))
-      );
-    };
-
-    void loadAndSearch();
+          const index = await searchIndexRef.current;
+          if (cancelled) return;
+          const results = index.search(query, { prefix: true, fuzzy: 0.2 });
+          setSearchResults(results.slice(0, 10).map((result) => ({
+            id: String(result.id), title: String(result.title), author: String(result.author),
+            content: String(result.content), tokens: result.tokens as string[], score: result.score,
+            excerpt: buildMatchedExcerpt(String(result.content), query)
+          })));
+        } catch { if (!cancelled) setSearchError(true); }
+        finally { if (!cancelled) setSearchLoading(false); }
+      };
+      void loadAndSearch();
+    }, 160);
+    return () => { cancelled = true; window.clearTimeout(timer); };
   }, [query]);
 
   const visibleBooks = useMemo(() => {
-    const filteredBooks =
-      activeShelf === "all" ? books : books.filter((book) => book.shelves.includes(activeShelf));
-
+    const filteredBooks = activeShelf === "all" ? books : books.filter((book) => book.shelves.includes(activeShelf));
     return [...filteredBooks].sort((left, right) => compareBooks(left, right, sortMode));
   }, [activeShelf, books, sortMode]);
 
+  const openBook = (id: string) => {
+    if (!selectedBookId) scrollPosition.current = window.scrollY;
+    lastBookId.current = id;
+    const hash = `#book=${encodeURIComponent(id)}`;
+    if (selectedBookId) window.history.replaceState(window.history.state, "", hash);
+    else window.history.pushState({ readlogDetail: true }, "", hash);
+    setSelectedBookId(id);
+    setQuery("");
+  };
+  const returnToShelf = () => {
+    if (window.history.state?.readlogDetail) window.history.back();
+    else {
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+      setSelectedBookId(null);
+    }
+  };
   const activeShelfLabel = activeShelf === "all" ? "所有图书" : activeShelf;
-  const showMobileDetail = isMobile && Boolean(selectedBookId);
 
   return (
     <div className="layout">
-      <Sidebar
-        activeShelf={activeShelf}
-        onSelectShelf={(shelf) => {
-          setActiveShelf(shelf);
-          setSelectedBookId(null);
-        }}
-        shelves={shelves}
-        totalCount={books.length}
-      />
-
-      <main className="main-panel">
-        <div className="topbar">
-          <SearchBar
-            onQueryChange={setQuery}
-            onSelectResult={(id) => {
-              setSelectedBookId(id);
-              setQuery("");
-              const matchedBook = books.find((book) => book.id === id);
-
-              if (matchedBook && matchedBook.shelves.length > 0) {
-                setActiveShelf(matchedBook.shelves[0]);
-              }
-            }}
-            query={query}
-            results={searchResults}
-          />
-
-          <div className="toolbar">
-            <div>
-              <p className="eyebrow">Current Shelf</p>
-              <h2>{activeShelfLabel}</h2>
+      <a className="skip-link" href="#main-content" onClick={(event) => {
+        event.preventDefault();
+        const main = document.getElementById("main-content");
+        main?.focus();
+        main?.scrollIntoView({ block: "start" });
+      }}>跳至内容</a>
+      <Sidebar activeShelf={activeShelf} onSelectShelf={(shelf) => {
+        setActiveShelf(shelf);
+        scrollPosition.current = 0;
+        lastBookId.current = null;
+        setSelectedBookId(null);
+        setQuery("");
+        window.history.replaceState(null, "", window.location.pathname + window.location.search);
+        window.scrollTo(0, 0);
+      }} shelves={shelves} totalCount={books.length} />
+      <main className="main-panel" id="main-content" tabIndex={-1}>
+        <header className="topbar">
+          <SearchBar onQueryChange={setQuery} onSelectResult={openBook} query={query} results={searchResults} loading={searchLoading} error={searchError} />
+        </header>
+        <div className="main-content">
+          {selectedBookId ? (
+            <div className="detail-wrapper">
+              <button className="detail-back" onClick={returnToShelf} ref={backRef} type="button"><Icon name="arrow-left" size={18} />返回{activeShelfLabel}</button>
+              {detailError ? <div className="status-panel" role="alert"><p>这本书暂时无法打开。</p><button className="text-button" onClick={() => setRetry((value) => value + 1)}>重新加载</button></div> : <DetailErrorBoundary><Suspense fallback={<p role="status">正在打开这本书…</p>}><BookDetail book={selectedBook} loading={detailLoading} /></Suspense></DetailErrorBoundary>}
             </div>
-
-            <label className="sort-select">
-              <span>排序</span>
-              <select onChange={(event) => setSortMode(event.target.value as SortMode)} value={sortMode}>
-                <option value="addedAt">按加入时间</option>
-                <option value="rating">按评分</option>
-              </select>
-            </label>
-          </div>
-        </div>
-
-        <div className={`content-grid ${showMobileDetail ? "is-mobile-detail" : ""}`}>
-          <section className="books-panel">
-            {visibleBooks.map((book) => (
-              <BookCard
-                book={book}
-                isActive={book.id === selectedBookId}
-                key={book.id}
-                onSelect={setSelectedBookId}
-              />
-            ))}
-          </section>
-
-          <section className="detail-wrapper">
-            {showMobileDetail ? (
-              <button className="detail-back" onClick={() => setSelectedBookId(null)} type="button">
-                ← 返回书单
-              </button>
-            ) : null}
-            <BookDetail book={selectedBook} loading={detailLoading} />
-          </section>
+          ) : (
+            <>
+              <div className="toolbar">
+                <div className="shelf-heading"><h1>{activeShelfLabel}</h1><span>{visibleBooks.length} 本</span></div>
+                <label className="sort-select"><Icon name="sort" size={17} /><span className="sr-only">排序方式</span><select onChange={(event) => setSortMode(event.target.value as SortMode)} value={sortMode}><option value="addedAt">最近加入</option><option value="rating">评分最高</option></select></label>
+              </div>
+              {booksLoading ? <div className="books-panel" aria-label="正在加载书架" aria-busy="true">{Array.from({ length: 8 }, (_, index) => <div className="book-skeleton" key={index}><div className="skeleton skeleton-cover" /><div className="skeleton skeleton-line" /></div>)}</div>
+                : booksError ? <div className="status-panel" role="alert"><p>书架暂时无法加载，请稍后重试。</p><button className="text-button" onClick={() => setRetry((value) => value + 1)}>重新加载</button></div>
+                : visibleBooks.length ? <section className="books-panel" aria-label={activeShelfLabel}>{visibleBooks.map((book) => <BookCard book={book} key={book.id} onSelect={openBook} />)}</section>
+                : <div className="status-panel"><Icon name="book" size={30} /><p>这个书架还没有图书。</p></div>}
+              {!booksLoading && visibleBooks.length > 0 && <footer className="collection-footer">共 {visibleBooks.length} 本 · 每次阅读，都有所得</footer>}
+            </>
+          )}
         </div>
       </main>
     </div>
